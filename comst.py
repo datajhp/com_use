@@ -7,7 +7,7 @@ import streamlit as st
 from PyPDF2 import PdfReader, PdfWriter
 
 # API 설정
-API_KEY = "up_AYAFSlFu1TG5sYMnScc2LcDR7UA8o"  # 🔐 여기에 실제 키 입력
+API_KEY = st.secrets["api"]["upstage_key"] # 🔐 여기에 실제 키 입력
 OCR_URL = "https://api.upstage.ai/v1/document-digitization"
 HEADERS = {"Authorization": f"Bearer {API_KEY}"}
 
