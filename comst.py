@@ -136,7 +136,7 @@ if uploaded_file:
 
     # 추천 분할 개수
     recommended = recommend_split_count_advanced(pdf_path)
-    st.info(f"🔍 추천 분할 개수: {recommended}개 (페이지 수, 이미지 비율, 해상도 기준)")
+    st.info(f"🔍 추천 안전 분할 개수: {recommended}개 (페이지 수, 이미지 비율, 해상도 기준)")
 
     num_parts = st.slider("2. 분할 개수 선택", min_value=1, max_value=20, value=recommended)
 
