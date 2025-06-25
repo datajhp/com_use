@@ -166,13 +166,10 @@ if uploaded_file:
 
 
 
-import streamlit as st
-import json
 import openai
 
 # 기존 API Key 사용
-from main import API_KEY  # 또는 별도 config.py로 분리 가능
-
+API_KEY = st.secrets["openai"]["api_key"]
 openai.api_key = API_KEY
 
 # 제목
