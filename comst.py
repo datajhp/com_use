@@ -166,11 +166,9 @@ if uploaded_file:
 
 
 
-import openai
+from openai import OpenAI
 
-# 기존 API Key 사용
-API_KEY = st.secrets["openai"]["api_key"]
-openai.api_key = API_KEY
+client = OpenAI(api_key=st.secrets["openai"]["api_key"])
 
 # 제목
 st.title("🧠 컴활 요약 자동 생성기 (GPT)")
@@ -227,13 +225,15 @@ if json_file:
 
     # GPT 호출 함수
     def gpt_summarize(prompt):
-        response = openai.ChatCompletion.create(
+        from openai import OpenAI
+        client = OpenAI(api_key=st.secrets["openai"]["api_key"])
+        response = client.chat.completions.create(
             model="gpt-4o",
             messages=[{"role": "user", "content": prompt}],
             temperature=0.7,
             max_tokens=1500
         )
-        return response.choices[0].message["content"]
+        return response.choices[0].message.content
 
     # 절 선택
     selected_sections = st.multiselect("요약할 절을 선택하세요", options=sections, default=sections[:3])
