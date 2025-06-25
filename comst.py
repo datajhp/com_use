@@ -161,3 +161,105 @@ if uploaded_file:
 
         with open(merged, "rb") as f:
             st.download_button("📥 병합된 JSON 다운로드", f, file_name="merged_output.json", mime="application/json")
+
+
+
+
+
+import streamlit as st
+import json
+import openai
+
+# 기존 API Key 사용
+from main import API_KEY  # 또는 별도 config.py로 분리 가능
+
+openai.api_key = API_KEY
+
+# 제목
+st.title("🧠 컴활 요약 자동 생성기 (GPT)")
+
+# JSON 업로드
+json_file = st.file_uploader("📤 OCR 결과 merged_output.json 업로드", type="json")
+if json_file:
+    data = json.load(json_file)
+    html_text = data["content"]["html"]
+
+    # 과목/장 정보 입력
+    subject = st.text_input("과목", "1과목")
+    chapter = st.text_input("장 정보", "2장, 3장, 4장, 5장")
+
+    sections = [
+        "설정</h1>", "유·무선 네트워크 설정</h1>", "컴퓨터의 개념 및 원리</h1>", "컴퓨터의 발전 과정</h1>",
+        "컴퓨터의 분류</h1>", "자료의 표현 및 처리 방식</h1>", "수의 표현 및 연산</h1>", "중앙 처리 장치</h1>",
+        "기억 장치의 구성</h1>", "입출력 장치</h1>", "기타 장치</h1>", "소프트웨어</h1>", "유틸리티(Utility)</h1>",
+        "프로그래밍 언어</h1>", "PC 유지와 보수</h1>", "Windows에서 PC 관리\n", "인터넷 일반</h1>",
+        "인터넷 서비스</h1>", "멀티미디어의 개념\n", "멀티미디어의 운용</h1>", "정보 통신 일반</h1>",
+        "정보 윤리</h1>", "컴퓨터 범죄</h1>", "바이러스 예방과 치료</h1>",
+    ]
+
+    # 절 내용 추출 함수
+    def extract_section(section_title):
+        start_idx = html_text.find(section_title)
+        if start_idx == -1:
+            return None
+        next_sections = [
+            html_text.find(s, start_idx + 1)
+            for s in sections if html_text.find(s, start_idx + 1) != -1
+        ]
+        end_idx = min(next_sections) if next_sections else len(html_text)
+        return html_text[start_idx:end_idx]
+
+    # 프롬프트 생성 함수
+    def make_prompt(subject, chapter, section, content):
+        return f"""
+당신은 컴퓨터활용능력 1급 필기 교재를 집필하는 전문 저자입니다.
+
+지금부터 제공하는 '{subject} {chapter} {section}' 교재 원문 내용을 바탕으로 수험생이 학습하기 좋도록 **교과서 스타일의 요약 원고**를 작성해주세요. 다음 지침을 반드시 따라주세요:
+
+1. 전체 내용을 충분히 반영하여 작성합니다.  
+2. 단순 요약이 아닌, **개념 정리, 단계별 설명, 예시, 도식 형태 설명 등**을 포함합니다.  
+3. 가급적이면 문단을 나눠 이해하기 쉽게 구성합니다.  
+4. 제목, 소제목, 글머리표 등을 활용하여 교재처럼 체계적으로 구성해주세요.  
+5. 문체는 수험 교재에 맞게 **정중하고 설명 위주**로 작성해주세요.
+
+### 교재 원문:
+{content}
+
+### 요약 원고 (교재 형식):
+"""
+
+    # GPT 호출 함수
+    def gpt_summarize(prompt):
+        response = openai.ChatCompletion.create(
+            model="gpt-4o",
+            messages=[{"role": "user", "content": prompt}],
+            temperature=0.7,
+            max_tokens=1500
+        )
+        return response.choices[0].message["content"]
+
+    # 절 선택
+    selected_sections = st.multiselect("요약할 절을 선택하세요", options=sections, default=sections[:3])
+
+    if st.button("📘 요약 생성"):
+        all_outputs = {}
+        for sec in selected_sections:
+            extracted = extract_section(sec)
+            if extracted:
+                prompt = make_prompt(subject, chapter, sec, extracted)
+                with st.spinner(f"{sec} 요약 중..."):
+                    try:
+                        result = gpt_summarize(prompt)
+                        st.subheader(f"📘 {sec.replace('</h1>', '')}")
+                        st.write(result)
+                        all_outputs[sec.replace("</h1>", "").strip()] = result
+                    except Exception as e:
+                        st.error(f"[❌ 오류] {sec} 요약 중 에러 발생: {e}")
+            else:
+                st.warning(f"[!] '{sec}' 절 내용을 찾을 수 없습니다.")
+
+        # 결과 다운로드
+        if all_outputs:
+            output_json = json.dumps(all_outputs, ensure_ascii=False, indent=2)
+            st.download_button("📥 요약 결과 JSON 다운로드", output_json, file_name="summary_output.json", mime="application/json")
+
