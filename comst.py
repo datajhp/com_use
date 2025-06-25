@@ -124,7 +124,7 @@ def merge_jsons(input_dir, output_path):
 
 # Streamlit UI
 st.set_page_config(page_title="컴활 요약집 OCR 자동화", layout="wide")
-st.title("📄 컴활 요약집 자동 생성기")
+st.title("📄 OCR 자동화기기")
 
 uploaded_file = st.file_uploader("1. PDF 파일 업로드", type="pdf")
 
@@ -171,7 +171,7 @@ from openai import OpenAI
 client = OpenAI(api_key=st.secrets["openai"]["api_key"])
 
 # 제목
-st.title("🧠 컴활 요약 자동 생성기 (GPT)")
+st.title("🧠 컴활 요약집 원고 자동 생성기 (GPT)")
 
 # JSON 업로드
 json_file = st.file_uploader("📤 OCR 결과 merged_output.json 업로드", type="json")
