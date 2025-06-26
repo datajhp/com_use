@@ -328,116 +328,129 @@ if json_file:
 
 
 
+import streamlit as st
+import json
 import re
+from openai import OpenAI
 
-# 🔐 GPT API Key (secrets.toml 이용)
+# 🔐 API Key from secrets.toml
 client = OpenAI(api_key=st.secrets["openai"]["api_key"])
 GPT_MODEL = "gpt-4o"
 
-st.title("📚 교재 스타일 다듬기 (GPT 기반 2차 가공)")
+st.title("📘 요약 원고 저장 + 교재 스타일 가공")
 
-uploaded_txt = st.file_uploader("📤 요약된 TXT 파일 업로드 (==== 단위로 나눈 형식)", type="txt")
+# ✅ 1단계: JSON 업로드 또는 이전 단계에서 자동 전달
+st.header("① 요약 원고 불러오기")
 
-if uploaded_txt:
-    full_text = uploaded_txt.read().decode("utf-8")
+uploaded_json = st.file_uploader("📤 요약 결과 JSON 업로드 (또는 자동 생성)", type="json")
 
-    # 섹션 나누기 함수
+if "summary_json" not in st.session_state:
+    st.session_state.summary_json = None
+
+if uploaded_json:
+    st.session_state.summary_json = json.load(uploaded_json)
+elif st.session_state.summary_json:
+    st.success("✅ 이전 단계에서 자동으로 요약 데이터를 불러왔습니다.")
+else:
+    st.warning("요약 JSON 파일을 업로드하거나 이전 단계에서 생성해주세요.")
+
+# ✅ 2단계: 저장 가능한 TXT 변환
+if st.session_state.summary_json:
+    json_data = st.session_state.summary_json
+    sections_txt = ""
+
+    for i, (title, content) in enumerate(json_data.items()):
+        sections_txt += f"\n\n===== {title} 요약 결과 =====\n\n{content}\n"
+
+    # 저장 버튼
+    st.download_button(
+        "📥 요약 결과 TXT 다운로드",
+        sections_txt,
+        file_name="summary_output.txt",
+        mime="text/plain"
+    )
+
+    st.download_button(
+        "📥 원본 JSON 다운로드",
+        json.dumps(json_data, ensure_ascii=False, indent=2),
+        file_name="summary_output.json",
+        mime="application/json"
+    )
+
+    st.markdown("---")
+
+    # ✅ 3단계: 자동 연결 (2차 가공)
+    st.header("② GPT 기반 교재 스타일 다듬기")
+
+    # 섹션 나누기
     def extract_sections(text):
         split_sections = re.split(r'^={5}.*?={5}\s*$', text, flags=re.MULTILINE)
         titles = re.findall(r'^={5}\s*(.*?)\s*(?:</h1>)?\s*요약 결과\s*={5}', text, flags=re.MULTILINE)
         return list(zip(titles, [s.strip() for s in split_sections if s.strip()]))
 
-    # GPT 프롬프트 함수
-    def ask_gpt_with_section_output(title, content):
-        prompt = f"[문단 제목]\n{title}\n\n[내용]\n{content}"
-        system_prompt = """
+    sections = extract_sections(sections_txt)
+    st.success(f"✅ 총 {len(sections)}개 절을 가공합니다.")
+
+    results = {}
+    for i, (title, content) in enumerate(sections):
+        with st.expander(f"📘 [{i+1}] {title} - GPT 재작성"):
+            with st.spinner(f"🔁 GPT로 '{title}' 다듬는 중..."):
+                try:
+                    # gpt 재작성 함수
+                    def ask_gpt(title, content):
+                        prompt = f"[문단 제목]\n{title}\n\n[내용]\n{content}"
+                        system_prompt = """
 당신은 교재를 집필하는 저자입니다. 아래 원고 문단은 교재의 일부입니다.  
 각 문단은 완결된 단원으로 책에 들어갈 수 있도록 **완성된 출판용 레이아웃과 서술 방식**으로 작성하세요.
 
 [중요 지침]
-
-1. **실제 교재 구성 형태로 출력하세요.**
-   - 단락 제목, 부제목, 본문 설명, 정리 요약, 실전 팁 등으로 구성
-   - 표가 필요한 경우 **완성된 표 내용을 포함**
-   - 도식이 필요한 경우 **구성 방식과 위치, 도식 구조 설명**
-   - 이미지가 필요한 경우 **어떤 이미지인지, 위치, 크기, 캡션까지 구체적으로**
-
-2. **한 문단씩 처리**하며, 각 문단은 한 장의 지면에 배치 가능하도록 구성하세요.
-   - 문단이 너무 길면 **두 개의 지면으로 나누어** `1/2`, `2/2` 식으로 나눠주세요.
-   - 너무 짧은 경우, 다음 문단과 연결해 1지면으로 처리해도 됩니다.
-
-3. 구성 항목은 다음과 같아야 합니다:
+1. 실제 교재 구성 형태로 출력하세요.
+2. 핵심 개념, 상세 설명, 표/도식, 학습 도우미 등 구조로 작성하세요.
+3. 이미지가 필요한 경우, 위치/설명/크기/캡션 포함
 
 [출력 포맷]
-
-📘 단원 제목: {문단 제목} / 난이도:⭐⭐⭐⭐⭐(1~5개)
-
----
-
+📘 단원 제목: {문단 제목} / 난이도:⭐⭐⭐⭐⭐
 ## ✨ 핵심 개념
-
-- {주요 개념을 2~3개로 요약 정리}
-
+- ...
 ## 📖 상세 설명
-
-{본문 설명 전체, 예시 포함하여 자연스럽게 이어지도록 상세히 서술}
-
-## 📊 표 또는 도식
-
-{필요한 경우만 아래 항목 포함}
-- **표 설명**: 무엇을 나타내는 표인지 간단히 설명
-- **표 내용**:
-
-## 학습 도우미
--✅ 빈칸 채우기 (필요 시): (빈칸 형식 문제)
--✏️혼자 공부하기: [활동내용] (⏰5분)
--🚀 더알아보기 : (심화학습 자료)
+...
 """
-        response = client.chat.completions.create(
-            model=GPT_MODEL,
-            messages=[
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": prompt}
-            ],
-            max_tokens=2000,
-            temperature=0.3
-        )
-        return response.choices[0].message.content.strip()
+                        response = client.chat.completions.create(
+                            model=GPT_MODEL,
+                            messages=[
+                                {"role": "system", "content": system_prompt},
+                                {"role": "user", "content": prompt}
+                            ],
+                            max_tokens=2000,
+                            temperature=0.3
+                        )
+                        return response.choices[0].message.content.strip()
 
-    # 실행
-    sections = extract_sections(full_text)
-    st.success(f"✅ 총 {len(sections)}개 단원을 분석했습니다.")
-
-    results = {}
-    for i, (title, content) in enumerate(sections):
-        with st.expander(f"📄 {i+1}. {title}"):
-            with st.spinner(f"'{title}' 요약 다듬는 중..."):
-                try:
-                    refined = ask_gpt_with_section_output(title, content)
+                    refined = ask_gpt(title, content)
                     st.markdown(refined, unsafe_allow_html=True)
                     results[title] = refined
+
                 except Exception as e:
                     st.error(f"❌ 오류: {e}")
 
-    # 결과 저장
+    # 최종 결과 저장
     if results:
-        refined_text = ""
-        for title, result in results.items():
-            refined_text += f"\n\n===== {title} 요약 결과 =====\n\n{result}\n"
+        full_refined_txt = ""
+        for title, body in results.items():
+            full_refined_txt += f"\n\n===== {title} 요약 결과 =====\n\n{body}\n"
 
         st.download_button(
-            "📥 전체 요약결과 TXT 다운로드",
-            refined_text,
-            file_name="refined_summary.txt",
+            "📥 최종 교재 스타일 TXT 다운로드",
+            full_refined_txt,
+            file_name="refined_textbook.txt",
             mime="text/plain"
         )
 
         st.download_button(
-            "📥 JSON 포맷 다운로드",
+            "📥 최종 JSON 다운로드",
             json.dumps(results, ensure_ascii=False, indent=2),
-            file_name="refined_summary.json",
+            file_name="refined_textbook.json",
             mime="application/json"
         )
-
 
 
