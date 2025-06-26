@@ -337,7 +337,7 @@ from openai import OpenAI
 client = OpenAI(api_key=st.secrets["openai"]["api_key"])
 GPT_MODEL = "gpt-4o"
 
-st.title("📘 요약 원고 저장 + 교재 스타일 가공")
+st.title("📘 교재 스타일 레이아웃 가공")
 
 # ✅ 1단계: JSON 업로드 또는 이전 단계에서 자동 전달
 st.header("① 요약 원고 불러오기")
